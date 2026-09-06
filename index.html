@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Akış: işletmeler için AI iş akışı kurucu.">
+  <title>Akış — AI iş akışını tek cümlede kur</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #10110f;
+      --surface: #171914;
+      --surface-2: #1e211a;
+      --line: #34372e;
+      --text: #f2f3eb;
+      --muted: #a5aa98;
+      --lime: #c5ff3d;
+      --lime-ink: #182000;
+      --blue: #8dc7ff;
+      --orange: #ffb66e;
+      --green: #86e6a5;
+      --danger: #ff938e;
+      --shadow: 0 24px 80px rgba(0, 0, 0, .25);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at 75% -10%, rgba(197,255,61,.09), transparent 38%), var(--bg);
+      color: var(--text);
+      font: 15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    a { color: inherit; text-decoration: none; }
+    .app { display: grid; grid-template-columns: 238px 1fr; min-height: 100vh; }
+    .sidebar {
+      display: flex; flex-direction: column; gap: 28px; padding: 24px 16px;
+      border-right: 1px solid var(--line); background: rgba(15,16,14,.82);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; padding: 0 10px; }
+    .brand-mark {
+      display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px;
+      background: var(--lime); color: var(--lime-ink); font-weight: 900;
+    }
+    .brand-copy { display: grid; line-height: 1; }
+    .brand-copy strong { font-size: 16px; letter-spacing: -.04em; }
+    .eyebrow, .nav-label, .kicker { color: var(--muted); font-size: 10px; letter-spacing: .15em; text-transform: uppercase; }
+    .brand-copy span { margin-top: 5px; color: var(--muted); font-size: 9px; letter-spacing: .2em; text-transform: uppercase; }
+    nav { display: grid; gap: 5px; }
+    .nav-label { padding: 0 12px 7px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 11px; width: 100%; padding: 10px 12px; border: 0; border-radius: 9px;
+      background: transparent; color: var(--muted); text-align: left;
+    }
+    .nav-item:hover, .nav-item.active { background: var(--surface-2); color: var(--text); }
+    .nav-item.active { box-shadow: inset 2px 0 var(--lime); }
+    .nav-icon { width: 18px; color: currentColor; text-align: center; font-weight: 700; }
+    .sidebar-note { margin-top: auto; padding: 15px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+    .sidebar-note p { margin: 7px 0 12px; color: var(--muted); font-size: 12px; }
+    .mini-progress { height: 5px; overflow: hidden; border-radius: 99px; background: #2c3028; }
+    .mini-progress span { display: block; width: 72%; height: 100%; background: var(--lime); }
+    .main { min-width: 0; padding: 24px clamp(20px, 4vw, 54px) 56px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; max-width: 1180px; margin: 0 auto 48px; }
+    .topbar-left { display: flex; align-items: center; gap: 12px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px rgba(134,230,165,.1); }
+    .topbar small { color: var(--muted); }
+    .top-actions { display: flex; align-items: center; gap: 10px; }
+    .icon-button, .avatar { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--muted); }
+    .avatar { border: 0; background: var(--lime); color: var(--lime-ink); font-weight: 800; }
+    .content { max-width: 1180px; margin: 0 auto; }
+    .hero { display: grid; grid-template-columns: 1.2fr .8fr; align-items: end; gap: 32px; margin-bottom: 28px; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { max-width: 700px; margin-bottom: 14px; font-size: clamp(36px, 5vw, 64px); line-height: .98; letter-spacing: -.065em; }
+    h1 em { color: var(--lime); font-style: normal; }
+    .hero-copy { max-width: 620px; color: var(--muted); font-size: 16px; }
+    .hero-aside { justify-self: end; max-width: 270px; color: var(--muted); font-size: 12px; }
+    .hero-aside strong { display: block; margin-bottom: 8px; color: var(--text); font-size: 14px; }
+    .composer { padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: linear-gradient(135deg, rgba(197,255,61,.07), transparent 48%), var(--surface); box-shadow: var(--shadow); }
+    .composer-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .composer-head span:last-child { color: var(--green); font-size: 12px; }
+    .composer-row { display: flex; gap: 10px; }
+    .composer input { min-width: 0; flex: 1; padding: 14px 15px; border: 1px solid var(--line); border-radius: 10px; outline: 0; background: #11130f; color: var(--text); }
+    .composer input:focus { border-color: var(--lime); box-shadow: 0 0 0 3px rgba(197,255,61,.1); }
+    .primary { border: 0; border-radius: 10px; padding: 0 18px; background: var(--lime); color: var(--lime-ink); font-weight: 800; }
+    .primary:hover { filter: brightness(1.08); }
+    .primary:disabled { opacity: .55; cursor: wait; }
+    .suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .suggestion { padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--muted); font-size: 12px; }
+    .suggestion:hover { border-color: var(--lime); color: var(--text); }
+    .section-head { display: flex; align-items: end; justify-content: space-between; gap: 15px; margin: 42px 0 14px; }
+    .section-head h2 { margin: 0; font-size: 21px; letter-spacing: -.03em; }
+    .section-head a { color: var(--lime); font-size: 12px; }
+    .workflow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; position: relative; }
+    .workflow::before { content: ""; position: absolute; top: 37px; left: 16%; right: 16%; height: 1px; background: linear-gradient(90deg, var(--blue), var(--orange), var(--lime)); opacity: .4; }
+    .stage { position: relative; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: rgba(23,25,20,.88); }
+    .stage-icon { display: grid; place-items: center; width: 38px; height: 38px; margin-bottom: 15px; border-radius: 10px; font-weight: 900; }
+    .stage:nth-child(1) .stage-icon { background: rgba(141,199,255,.14); color: var(--blue); }
+    .stage:nth-child(2) .stage-icon { background: rgba(255,182,110,.14); color: var(--orange); }
+    .stage:nth-child(3) .stage-icon { background: rgba(197,255,61,.14); color: var(--lime); }
+    .stage h3 { margin-bottom: 5px; font-size: 16px; }
+    .stage p { min-height: 43px; margin-bottom: 15px; color: var(--muted); font-size: 12px; }
+    .stage-foot { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 11px; }
+    .pill { padding: 4px 7px; border-radius: 5px; background: var(--surface-2); color: var(--green); }
+    .dashboard-grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 14px; }
+    .panel { min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+    .panel h3 { margin-bottom: 3px; font-size: 16px; }
+    .panel-subtitle { margin-bottom: 16px; color: var(--muted); font-size: 12px; }
+    .run { display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 11px; padding: 13px 0; border-top: 1px solid var(--line); }
+    .run:first-of-type { border-top: 0; }
+    .run-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+    .run-dot.wait { background: var(--orange); }
+    .run-title { margin-bottom: 2px; font-size: 13px; }
+    .run-meta { color: var(--muted); font-size: 11px; }
+    .run-state { color: var(--green); font-size: 11px; }
+    .run-state.wait { color: var(--orange); }
+    .metric { display: flex; align-items: baseline; justify-content: space-between; padding: 14px 0; border-top: 1px solid var(--line); }
+    .metric:first-of-type { border-top: 0; }
+    .metric span { color: var(--muted); font-size: 12px; }
+    .metric strong { font-size: 20px; letter-spacing: -.04em; }
+    .empty { display: none; margin-top: 12px; padding: 12px; border: 1px dashed #555c44; border-radius: 10px; color: var(--lime); background: rgba(197,255,61,.06); font-size: 12px; }
+    .empty.show { display: block; }
+    .result-panel { margin-top: 14px; padding: 18px; border: 1px solid rgba(197,255,61,.35); border-radius: 13px; background: rgba(197,255,61,.055); }
+    .result-panel[hidden] { display: none; }
+    .result-head { display: flex; align-items: start; justify-content: space-between; gap: 18px; margin-bottom: 15px; }
+    .result-head h3 { margin: 5px 0 0; font-size: 18px; letter-spacing: -.03em; }
+    .result-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 15px; }
+    .result-item { padding-top: 10px; border-top: 1px solid rgba(197,255,61,.18); }
+    .result-item span, .tools-label { display: block; margin-bottom: 3px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+    .result-item strong { display: block; font-size: 13px; font-weight: 600; }
+    .task-steps { display: grid; gap: 7px; margin: 0 0 15px; padding-left: 22px; color: var(--text); font-size: 13px; }
+    .task-steps li::marker { color: var(--lime); font-weight: 700; }
+    .result-tools { color: var(--muted); font-size: 12px; }
+    .result-tools strong { color: var(--text); font-weight: 600; }
+    .toast { position: fixed; right: 22px; bottom: 22px; max-width: 340px; padding: 13px 16px; border: 1px solid var(--lime); border-radius: 10px; background: #202614; color: var(--text); box-shadow: var(--shadow); transform: translateY(20px); opacity: 0; pointer-events: none; transition: .22s ease; }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    @media (max-width: 850px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { position: static; display: block; padding: 16px 18px; border-right: 0; border-bottom: 1px solid var(--line); }
+      .brand { margin-bottom: 14px; }
+      nav { display: flex; overflow: auto; gap: 5px; }
+      .nav-label, .sidebar-note { display: none; }
+      .nav-item { white-space: nowrap; width: auto; }
+      .hero, .dashboard-grid { grid-template-columns: 1fr; }
+      .hero-aside { justify-self: start; }
+      .result-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .main { padding: 18px 16px 40px; }
+      .topbar { margin-bottom: 34px; }
+      .topbar-left small { display: none; }
+      .hero { gap: 18px; }
+      h1 { font-size: 43px; }
+      .composer-row { flex-direction: column; }
+      .primary { min-height: 46px; }
+      .workflow { grid-template-columns: 1fr; }
+      .workflow::before { top: 12%; bottom: 12%; left: 37px; right: auto; width: 1px; height: auto; background: linear-gradient(180deg, var(--blue), var(--orange), var(--lime)); }
+      .stage { display: grid; grid-template-columns: 38px 1fr; column-gap: 14px; }
+      .stage-icon { grid-row: span 2; margin-bottom: 0; }
+      .stage h3, .stage p, .stage-foot { grid-column: 2; }
+      .stage p { min-height: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="Ana menü">
+      <div class="brand">
+        <div class="brand-mark">A</div>
+        <div class="brand-copy"><strong>Akış</strong><span>AI workspace</span></div>
+      </div>
+      <nav>
+        <div class="nav-label">Çalışma alanı</div>
+        <button class="nav-item active" type="button"><span class="nav-icon">⌂</span>Genel bakış</button>
+        <button class="nav-item" type="button"><span class="nav-icon">↗</span>İş akışları</button>
+        <button class="nav-item" type="button" data-url="https://dashboard.composio.dev/tpberg3tp_workspace/tpberg3tp_workspace_first_project/auth-configs"><span class="nav-icon">⊕</span>Bağlantılar</button>
+        <button class="nav-item" type="button"><span class="nav-icon">◷</span>Çalıştırmalar</button>
+        <div class="nav-label" style="margin-top:18px">Yardım</div>
+        <button class="nav-item" type="button"><span class="nav-icon">?</span>Playbook</button>
+      </nav>
+      <div class="sidebar-note">
+        <div class="eyebrow">Kurulum ilerlemesi</div>
+        <p>Bağlantılarını ekle, ilk iş akışını canlıya al.</p>
+        <div class="mini-progress" aria-label="Kurulum yüzde 72"><span></span></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-left"><span class="status-dot"></span><small>Çalışma alanı / Demo şirketi</small></div>
+        <div class="top-actions"><button class="icon-button" type="button" aria-label="Bildirimler">◌</button><div class="avatar" aria-label="Kullanıcı">A</div></div>
+      </header>
+
+      <div class="content">
+        <section class="hero">
+          <div>
+            <div class="kicker">AI iş akışı kurucu</div>
+            <h1>İşini anlat. <em>Akış</em> kursun.</h1>
+            <p class="hero-copy">Tek cümlelik bir hedefi; bağlı uygulamalar, güvenli görevler ve ölçülebilir çıktılardan oluşan çalışan bir akışa dönüştür.</p>
+          </div>
+          <div class="hero-aside"><strong>Üç katman, tek sonuç.</strong>ChatGPT planlar. Composio uygulamalara bağlanır. Modal.com ağır işleri çalıştırır.</div>
+        </section>
+
+        <section class="composer" aria-label="Yeni iş akışı oluştur">
+          <div class="composer-head"><span class="eyebrow">Yeni akış</span><span>● Modal bağlı · Composio bağlı</span></div>
+          <div class="composer-row">
+            <input id="prompt" type="text" value="Yeni müşteri e-postalarını özetle ve Slack'e gönder" aria-label="İş akışı hedefi">
+            <button id="build" class="primary" type="button">Akış oluştur →</button>
+          </div>
+          <div class="suggestions" aria-label="Hazır örnekler">
+            <button class="suggestion" type="button" data-prompt="Gelen PDF faturaları sınıflandır ve aylık rapor hazırla">PDF faturaları işle</button>
+            <button class="suggestion" type="button" data-prompt="Yeni satış fırsatlarını bul ve CRM'e kaydet">Satış fırsatlarını yakala</button>
+            <button class="suggestion" type="button" data-prompt="Toplantı notlarından kararları ve görevleri çıkar">Toplantıdan görev çıkar</button>
+          </div>
+          <div id="empty" class="empty" role="status"></div>
+          <section id="result" class="result-panel" aria-live="polite" hidden>
+            <div class="result-head">
+              <div><div class="eyebrow">Görev tanımı</div><h3 id="result-title">—</h3></div>
+              <span id="result-status" class="pill">Hazırlandı</span>
+            </div>
+            <div class="result-grid">
+              <div class="result-item"><span>Kaynak</span><strong id="result-source">—</strong></div>
+              <div class="result-item"><span>İşleme</span><strong id="result-processing">—</strong></div>
+              <div class="result-item"><span>Hedef</span><strong id="result-destination">—</strong></div>
+            </div>
+            <ol id="result-steps" class="task-steps"></ol>
+            <div id="result-tools" class="result-tools"></div>
+          </section>
+        </section>
+
+        <div class="section-head"><h2>Akış nasıl çalışır?</h2><a href="#runs">Son çalıştırmalar →</a></div>
+        <section class="workflow" aria-label="Akış aşamaları">
+          <article class="stage"><div class="stage-icon">✦</div><h3>1 · ChatGPT</h3><p>İsteği anlar, adımlara böler ve hangi araçların gerektiğini seçer.</p><div class="stage-foot"><span>Planlama</span><span class="pill">Hazır</span></div></article>
+          <article class="stage"><div class="stage-icon">↗</div><h3>2 · Composio</h3><p>Gmail, Slack, Notion, GitHub ve CRM gibi bağlı uygulamalarda işlem yapar.</p><div class="stage-foot"><span>Bağlantılar</span><span class="pill">2 bağlı</span></div></article>
+          <article class="stage"><div class="stage-icon">◆</div><h3>3 · Modal.com</h3><p>PDF, veri analizi, OCR veya GPU gerektiren görevleri bulutta çalıştırır.</p><div class="stage-foot"><span>Çalıştırma</span><span class="pill">Ölçeklenir</span></div></article>
+        </section>
+
+        <div class="section-head" id="runs"><h2>Bugünün özeti</h2><a href="#">Tüm çalıştırmalar →</a></div>
+        <section class="dashboard-grid">
+          <article class="panel">
+            <h3>Son çalıştırmalar</h3><p class="panel-subtitle">Akışlarının son hareketleri</p>
+            <div class="run"><span class="run-dot"></span><div><div class="run-title">Müşteri e-posta özeti</div><div class="run-meta">Gmail → ChatGPT → Slack · 2 dk önce</div></div><span class="run-state">Tamamlandı</span></div>
+            <div class="run"><span class="run-dot"></span><div><div class="run-title">Haftalık satış raporu</div><div class="run-meta">CRM → Modal.com → Notion · 28 dk önce</div></div><span class="run-state">Tamamlandı</span></div>
+            <div class="run"><span class="run-dot wait"></span><div><div class="run-title">PDF fatura sınıflandırma</div><div class="run-meta">3 dosya · Modal.com GPU kuyruğu</div></div><span class="run-state wait">Sırada</span></div>
+          </article>
+          <article class="panel">
+            <h3>Etki</h3><p class="panel-subtitle">Bu ayın çalışma alanı metrikleri</p>
+            <div class="metric"><span>Çalıştırılan akış</span><strong>148</strong></div>
+            <div class="metric"><span>Tasarruf edilen saat</span><strong>36,5</strong></div>
+            <div class="metric"><span>Başarı oranı</span><strong style="color:var(--lime)">%98,2</strong></div>
+          </article>
+        </section>
+      </div>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script>
+    const promptInput = document.getElementById('prompt');
+    const empty = document.getElementById('empty');
+    const toast = document.getElementById('toast');
+    const buildButton = document.getElementById('build');
+    const resultPanel = document.getElementById('result');
+    const resultTitle = document.getElementById('result-title');
+    const resultStatus = document.getElementById('result-status');
+    const resultSource = document.getElementById('result-source');
+    const resultProcessing = document.getElementById('result-processing');
+    const resultDestination = document.getElementById('result-destination');
+    const resultSteps = document.getElementById('result-steps');
+    const resultTools = document.getElementById('result-tools');
+    const modalEndpoint = window.location.hostname.endsWith('github.io')
+      ? 'https://tpberg3tp--akis-workflow-web.modal.run'
+      : '/api';
+    let toastTimer;
+
+    function notify(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 3200);
+    }
+
+    function renderResult(result, fallbackGoal) {
+      const task = result.task || {};
+      resultTitle.textContent = task.name || fallbackGoal;
+      resultStatus.textContent = result.status === 'planned' ? 'Plan hazır' : (result.status || 'Hazırlandı');
+      resultSource.textContent = task.source || 'Kullanıcı hedefi';
+      resultProcessing.textContent = task.processing || 'Görevi adımlara ayır';
+      resultDestination.textContent = task.destination || 'Akış çıktısı';
+      resultSteps.replaceChildren();
+      (result.steps || []).forEach((step) => {
+        const item = document.createElement('li');
+        item.textContent = `${step.owner}: ${step.action}`;
+        resultSteps.appendChild(item);
+      });
+      const tools = (result.integrations?.matched_tools || [])
+        .map((tool) => tool.name || tool.slug)
+        .filter(Boolean);
+      resultTools.replaceChildren();
+      const label = document.createElement('strong');
+      label.textContent = 'Seçilen araçlar: ';
+      resultTools.appendChild(label);
+      resultTools.appendChild(document.createTextNode(tools.length ? tools.join(' · ') : 'Composio araçları görev sırasında keşfedilecek.'));
+      resultPanel.hidden = false;
+    }
+
+    async function buildFlow() {
+      const value = promptInput.value.trim();
+      if (!value) {
+        empty.textContent = 'Önce yapmak istediğin işi tek cümleyle yaz.';
+        empty.classList.add('show');
+        promptInput.focus();
+        return;
+      }
+      buildButton.disabled = true;
+      buildButton.textContent = 'Planlanıyor…';
+      empty.textContent = 'Modal üzerinde akış planlanıyor…';
+      empty.classList.add('show');
+      try {
+        const response = await fetch(modalEndpoint + '/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ goal: value })
+        });
+        if (!response.ok) throw new Error('Modal yanıt vermedi');
+        const result = await response.json();
+        const toolCount = result.integrations?.matched_tools?.length || 0;
+        const composioMessage = result.integrations?.composio === 'connected'
+          ? 'Composio bağlantısı doğrulandı.'
+          : 'Composio uygulama bağlantısı bekliyor.';
+        empty.textContent = `Akış planlandı: ChatGPT görevi böldü, ${composioMessage} Modal.com çalıştırma adımını hazırladı${toolCount ? ` (${toolCount} araç eşleşti)` : ''}.`;
+        renderResult(result, value);
+        notify('Canlı Modal akışın hazırlandı.');
+      } catch (error) {
+        empty.textContent = 'Modal bağlantısı kurulamadı. Yerel demo modunu kontrol et.';
+        notify('Akış sunucusuna ulaşılamadı.');
+      } finally {
+        buildButton.disabled = false;
+        buildButton.textContent = 'Akış oluştur →';
+      }
+    }
+
+    document.getElementById('build').addEventListener('click', buildFlow);
+    promptInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') buildFlow(); });
+    document.querySelectorAll('[data-prompt]').forEach((button) => {
+      button.addEventListener('click', () => { promptInput.value = button.dataset.prompt; promptInput.focus(); });
+    });
+        document.querySelectorAll('.nav-item').forEach((item) => {
+          item.addEventListener('click', () => {
+            document.querySelectorAll('.nav-item').forEach((navItem) => navItem.classList.remove('active'));
+            item.classList.add('active');
+            if (item.dataset.url) {
+              window.open(item.dataset.url, '_blank', 'noopener');
+              notify('Composio bağlantı paneli açıldı.');
+              return;
+            }
+            notify(item.textContent.trim() + ' görünümü demo olarak hazır.');
+          });
+        });
+  </script>
+</body>
+</html>
