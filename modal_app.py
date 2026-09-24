@@ -17,8 +17,17 @@ app = modal.App(name="akis-workflow")
 
 api = FastAPI(title="Akış Workflow API", version="0.3.0")
 
-RUNS: list[dict[str, Any]] = []
-PROJECT_MEMORY: list[dict[str, Any]] = []
+CONTROL_PLANE_STATE = modal.Dict.from_name("akis-control-plane-v1", create_if_missing=True)
+
+
+async def load_state_list(key: str) -> list[dict[str, Any]]:
+    value = await CONTROL_PLANE_STATE.get.aio(key, [])
+    return value if isinstance(value, list) else []
+
+
+async def prepend_state(key: str, item: dict[str, Any], limit: int = 100) -> None:
+    items = await load_state_list(key)
+    await CONTROL_PLANE_STATE.put.aio(key, [item, *items][:limit])
 
 
 def risk_for_tool(slug: str) -> str:
@@ -104,9 +113,16 @@ async def run_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     policies = [{"tool": tool["slug"], "decision": risk_for_tool(tool["slug"])} for tool in matched_tools]
     receipts = [receipt(run_id, "goal_received", goal), receipt(run_id, "plan_created", f"{len(matched_tools)} tool(s) matched")]
     memory = {"id": str(uuid4()), "kind": "goal", "content": goal, "created_at": datetime.now(timezone.utc).isoformat()}
-    PROJECT_MEMORY.insert(0, memory)
-    run_record = {"id": run_id, "goal": goal, "status": "planned", "policies": policies, "receipts": receipts}
-    RUNS.insert(0, run_record)
+    run_record = {
+        "id": run_id,
+        "goal": goal,
+        "status": "planned",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "policies": policies,
+        "receipts": receipts,
+    }
+    await prepend_state("memory", memory)
+    await prepend_state("runs", run_record)
 
     return {
         "ok": True,
@@ -148,11 +164,14 @@ async def run_workflow(payload: dict[str, Any]) -> dict[str, Any]:
 
 @api.get("/control-plane")
 async def control_plane() -> dict[str, Any]:
+    runs = await load_state_list("runs")
+    memory = await load_state_list("memory")
     return {
         "ok": True,
+        "storage": "modal.Dict:akis-control-plane-v1",
         "agents": ["chatgpt", "codex", "claude", "cursor"],
-        "runs": RUNS[:20],
-        "memory": PROJECT_MEMORY[:20],
+        "runs": runs[:20],
+        "memory": memory[:20],
         "policy": {"read": "allow", "write": "approval_required", "destructive": "blocked"},
     }
 
