@@ -113,10 +113,12 @@ async def run_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     policies = [{"tool": tool["slug"], "decision": risk_for_tool(tool["slug"])} for tool in matched_tools]
     receipts = [receipt(run_id, "goal_received", goal), receipt(run_id, "plan_created", f"{len(matched_tools)} tool(s) matched")]
     memory = {"id": str(uuid4()), "kind": "goal", "content": goal, "created_at": datetime.now(timezone.utc).isoformat()}
+    requires_approval = any(policy["decision"] == "approval_required" for policy in policies)
+    run_status = "awaiting_approval" if requires_approval else "planned"
     run_record = {
         "id": run_id,
         "goal": goal,
-        "status": "planned",
+        "status": run_status,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "policies": policies,
         "receipts": receipts,
@@ -127,7 +129,7 @@ async def run_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "ok": True,
         "run_id": run_id,
-        "status": "planned",
+        "status": run_status,
         "goal": goal,
         "task": {
             "name": "Müşteri e-postası özeti",
@@ -160,6 +162,31 @@ async def run_workflow(payload: dict[str, Any]) -> dict[str, Any]:
             },
         ],
     }
+
+
+@api.post("/approvals/{run_id}")
+async def decide_approval(run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    decision = str(payload.get("decision", "")).strip().lower()
+    if decision not in {"approve", "reject"}:
+        return {"ok": False, "error": "decision must be approve or reject"}
+
+    runs = await load_state_list("runs")
+    target = next((run for run in runs if run.get("id") == run_id), None)
+    if target is None:
+        return {"ok": False, "error": "run not found"}
+    if target.get("status") != "awaiting_approval":
+        return {"ok": False, "error": "run is not awaiting approval", "status": target.get("status")}
+
+    target["status"] = "approved" if decision == "approve" else "rejected"
+    target["approval"] = {
+        "decision": decision,
+        "decided_at": datetime.now(timezone.utc).isoformat(),
+    }
+    target.setdefault("receipts", []).append(
+        receipt(run_id, f"approval_{decision}", f"Run {decision}d by user")
+    )
+    await CONTROL_PLANE_STATE.put.aio("runs", runs)
+    return {"ok": True, "run": target}
 
 
 @api.get("/control-plane")
