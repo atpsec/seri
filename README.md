@@ -34,3 +34,12 @@ Akış artık workflow planlamanın yanında ilk control-plane katmanını da ta
 - `/control-plane`: son çalışmalar, hafıza ve politika özetini sunar.
 
 Modal Dict kayıtları dayanıklı depodadır ancak Modal'ın güncel Dict yaşam döngüsü kurallarına tabidir. Gerçek MCP transport, harici Codex/Claude session adaptörleri ve öğrenen Skill Forge sonraki dilimlerdir.
+
+
+## Remote Agent Gateway
+
+External agents can now coordinate through the authenticated MCP endpoint:
+
+`https://tpberg3tp--akis-workflow-web.modal.run/agent/mcp`
+
+The gateway exposes `akis_claim_task`, `akis_get_context`, and `akis_submit_result`. It uses Streamable HTTP and requires the `AKIS_AGENT_TOKEN` bearer token. See [docs/agent-gateway.md](docs/agent-gateway.md) for Codex and Claude Code setup.
