@@ -1,7 +1,10 @@
 """Modal runtime for the Akış MVP."""
 
 import os
+from datetime import datetime, timezone
+from hashlib import sha256
 from typing import Any
+from uuid import uuid4
 
 import modal
 from composio import Composio
@@ -12,7 +15,25 @@ from fastapi.middleware.cors import CORSMiddleware
 image = modal.Image.debian_slim().uv_pip_install("fastapi[standard]", "composio")
 app = modal.App(name="akis-workflow")
 
-api = FastAPI(title="Akış Workflow API", version="0.1.0")
+api = FastAPI(title="Akış Workflow API", version="0.3.0")
+
+RUNS: list[dict[str, Any]] = []
+PROJECT_MEMORY: list[dict[str, Any]] = []
+
+
+def risk_for_tool(slug: str) -> str:
+    name = slug.upper()
+    if any(term in name for term in ("DELETE", "REMOVE", "REVOKE", "DROP")):
+        return "blocked"
+    if any(term in name for term in ("SEND", "CREATE", "UPDATE", "PUSH", "DEPLOY")):
+        return "approval_required"
+    return "allow"
+
+
+def receipt(run_id: str, event: str, detail: str) -> dict[str, str]:
+    timestamp = datetime.now(timezone.utc).isoformat()
+    digest = sha256(f"{run_id}:{timestamp}:{event}:{detail}".encode()).hexdigest()[:16]
+    return {"id": digest, "timestamp": timestamp, "event": event, "detail": detail}
 api.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -52,7 +73,7 @@ def describe_tool(tool: Any) -> dict[str, str]:
 
 @api.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "akis-workflow", "version": "0.2.0"}
+    return {"status": "ok", "service": "akis-workflow", "version": "0.3.0", "capabilities": "control-plane-v1"}
 
 
 @api.post("/run")
@@ -79,8 +100,17 @@ async def run_workflow(payload: dict[str, Any]) -> dict[str, Any]:
         # Planning remains usable if a user has not connected an app yet.
         composio_status = "needs_connection"
 
+    run_id = str(uuid4())
+    policies = [{"tool": tool["slug"], "decision": risk_for_tool(tool["slug"])} for tool in matched_tools]
+    receipts = [receipt(run_id, "goal_received", goal), receipt(run_id, "plan_created", f"{len(matched_tools)} tool(s) matched")]
+    memory = {"id": str(uuid4()), "kind": "goal", "content": goal, "created_at": datetime.now(timezone.utc).isoformat()}
+    PROJECT_MEMORY.insert(0, memory)
+    run_record = {"id": run_id, "goal": goal, "status": "planned", "policies": policies, "receipts": receipts}
+    RUNS.insert(0, run_record)
+
     return {
         "ok": True,
+        "run_id": run_id,
         "status": "planned",
         "goal": goal,
         "task": {
@@ -92,6 +122,12 @@ async def run_workflow(payload: dict[str, Any]) -> dict[str, Any]:
         "integrations": {
             "composio": composio_status,
             "matched_tools": matched_tools,
+        },
+        "control_plane": {
+            "agent_gateway": ["chatgpt", "codex", "claude", "cursor"],
+            "policies": policies,
+            "receipts": receipts,
+            "memory": memory,
         },
         "steps": [
             {
@@ -114,3 +150,14 @@ async def run_workflow(payload: dict[str, Any]) -> dict[str, Any]:
 @modal.asgi_app()
 def web() -> FastAPI:
     return api
+
+
+@api.get("/control-plane")
+async def control_plane() -> dict[str, Any]:
+    return {
+        "ok": True,
+        "agents": ["chatgpt", "codex", "claude", "cursor"],
+        "runs": RUNS[:20],
+        "memory": PROJECT_MEMORY[:20],
+        "policy": {"read": "allow", "write": "approval_required", "destructive": "blocked"},
+    }
