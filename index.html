@@ -133,6 +133,19 @@
     .task-steps li::marker { color: var(--lime); font-weight: 700; }
     .result-tools { color: var(--muted); font-size: 12px; }
     .result-tools strong { color: var(--text); font-weight: 600; }
+    .war-room { margin-top: 14px; }
+    .agent-strip { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 18px; }
+    .agent-chip { padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; }
+    .agent-chip strong { color: var(--text); text-transform: capitalize; }
+    .war-run { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; padding: 13px 0; border-top: 1px solid var(--line); }
+    .war-run:first-child { border-top: 0; }
+    .war-run-title { font-size: 13px; }
+    .war-run-meta { color: var(--muted); font-size: 11px; }
+    .war-actions { display: flex; gap: 7px; }
+    .war-button { padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--text); }
+    .war-button.approve { border-color: rgba(134,230,165,.45); color: var(--green); }
+    .war-button.reject { border-color: rgba(255,147,142,.45); color: var(--danger); }
+    .war-empty { color: var(--muted); font-size: 12px; padding: 8px 0; }
     .toast { position: fixed; right: 22px; bottom: 22px; max-width: 340px; padding: 13px 16px; border: 1px solid var(--lime); border-radius: 10px; background: #202614; color: var(--text); box-shadow: var(--shadow); transform: translateY(20px); opacity: 0; pointer-events: none; transition: .22s ease; }
     .toast.show { transform: translateY(0); opacity: 1; }
     @media (max-width: 850px) {
@@ -251,6 +264,14 @@
             <div class="metric"><span>Başarı oranı</span><strong style="color:var(--lime)">%98,2</strong></div>
           </article>
         </section>
+
+        <div class="section-head"><h2>Agent War Room</h2><a href="#" id="refresh-war-room">Yenile →</a></div>
+        <section class="panel war-room" aria-label="Agent War Room">
+          <h3>Control plane</h3>
+          <p class="panel-subtitle">Ajanlar, bekleyen onaylar ve son çalıştırmalar</p>
+          <div id="agent-strip" class="agent-strip"></div>
+          <div id="war-runs"><div class="war-empty">Control plane yükleniyor…</div></div>
+        </section>
       </div>
     </main>
   </div>
@@ -271,6 +292,8 @@
     const modalEndpoint = window.location.hostname.endsWith('github.io')
       ? 'https://tpberg3tp--akis-workflow-web.modal.run'
       : '/api';
+    const agentStrip = document.getElementById('agent-strip');
+    const warRuns = document.getElementById('war-runs');
     let toastTimer;
 
     function notify(message) {
@@ -304,6 +327,93 @@
       resultPanel.hidden = false;
     }
 
+    async function decideRun(runId, decision) {
+      try {
+        const response = await fetch(modalEndpoint + '/approvals/' + encodeURIComponent(runId), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.ok) throw new Error(result.error || 'Onay işlemi başarısız');
+        notify(decision === 'approve' ? 'Çalıştırma onaylandı.' : 'Çalıştırma reddedildi.');
+        await loadControlPlane();
+      } catch (error) {
+        notify(error.message || 'Control plane yanıt vermedi.');
+      }
+    }
+
+    async function loadControlPlane() {
+      try {
+        const response = await fetch(modalEndpoint + '/control-plane');
+        if (!response.ok) throw new Error('Control plane yanıt vermedi');
+        const data = await response.json();
+
+        agentStrip.replaceChildren();
+        (data.agents || []).forEach((agent) => {
+          const chip = document.createElement('span');
+          chip.className = 'agent-chip';
+          const strong = document.createElement('strong');
+          strong.textContent = agent;
+          chip.append(strong, document.createTextNode(' · bağlı'));
+          agentStrip.appendChild(chip);
+        });
+
+        warRuns.replaceChildren();
+        const runs = (data.runs || []).slice(0, 8);
+        if (!runs.length) {
+          const emptyState = document.createElement('div');
+          emptyState.className = 'war-empty';
+          emptyState.textContent = 'Henüz control-plane çalıştırması yok.';
+          warRuns.appendChild(emptyState);
+          return;
+        }
+
+        runs.forEach((run) => {
+          const row = document.createElement('div');
+          row.className = 'war-run';
+          const copy = document.createElement('div');
+          const title = document.createElement('div');
+          title.className = 'war-run-title';
+          title.textContent = run.tool || run.goal || run.id;
+          const meta = document.createElement('div');
+          meta.className = 'war-run-meta';
+          meta.textContent = (run.status || 'unknown') + ' · ' + (run.kind || 'workflow');
+          copy.append(title, meta);
+          row.appendChild(copy);
+
+          if (run.status === 'awaiting_approval') {
+            const actions = document.createElement('div');
+            actions.className = 'war-actions';
+            const approve = document.createElement('button');
+            approve.className = 'war-button approve';
+            approve.type = 'button';
+            approve.textContent = 'Onayla';
+            approve.addEventListener('click', () => decideRun(run.id, 'approve'));
+            const reject = document.createElement('button');
+            reject.className = 'war-button reject';
+            reject.type = 'button';
+            reject.textContent = 'Reddet';
+            reject.addEventListener('click', () => decideRun(run.id, 'reject'));
+            actions.append(approve, reject);
+            row.appendChild(actions);
+          } else {
+            const state = document.createElement('span');
+            state.className = 'pill';
+            state.textContent = run.status || 'unknown';
+            row.appendChild(state);
+          }
+          warRuns.appendChild(row);
+        });
+      } catch (error) {
+        warRuns.replaceChildren();
+        const failed = document.createElement('div');
+        failed.className = 'war-empty';
+        failed.textContent = 'Control plane verisi alınamadı.';
+        warRuns.appendChild(failed);
+      }
+    }
+
     async function buildFlow() {
       const value = promptInput.value.trim();
       if (!value) {
@@ -331,6 +441,7 @@
         empty.textContent = `Akış planlandı: ChatGPT görevi böldü, ${composioMessage} Modal.com çalıştırma adımını hazırladı${toolCount ? ` (${toolCount} araç eşleşti)` : ''}.`;
         renderResult(result, value);
         notify('Canlı Modal akışın hazırlandı.');
+        await loadControlPlane();
       } catch (error) {
         empty.textContent = 'Modal bağlantısı kurulamadı. Yerel demo modunu kontrol et.';
         notify('Akış sunucusuna ulaşılamadı.');
@@ -341,7 +452,9 @@
     }
 
     document.getElementById('build').addEventListener('click', buildFlow);
+    document.getElementById('refresh-war-room').addEventListener('click', (event) => { event.preventDefault(); loadControlPlane(); });
     promptInput.addEventListener('keydown', (event) => { if (event.key === 'Enter') buildFlow(); });
+    loadControlPlane();
     document.querySelectorAll('[data-prompt]').forEach((button) => {
       button.addEventListener('click', () => { promptInput.value = button.dataset.prompt; promptInput.focus(); });
     });
