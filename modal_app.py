@@ -146,12 +146,6 @@ async def run_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-@app.function(image=image, secrets=[modal.Secret.from_name("composio-akis")])
-@modal.asgi_app()
-def web() -> FastAPI:
-    return api
-
-
 @api.get("/control-plane")
 async def control_plane() -> dict[str, Any]:
     return {
@@ -161,3 +155,9 @@ async def control_plane() -> dict[str, Any]:
         "memory": PROJECT_MEMORY[:20],
         "policy": {"read": "allow", "write": "approval_required", "destructive": "blocked"},
     }
+
+
+@app.function(image=image, secrets=[modal.Secret.from_name("composio-akis")])
+@modal.asgi_app()
+def web() -> FastAPI:
+    return api
