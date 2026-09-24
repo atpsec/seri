@@ -1,5 +1,6 @@
 """Modal runtime for the Akış MVP."""
 
+import asyncio
 import os
 from datetime import datetime, timezone
 from hashlib import sha256
@@ -37,6 +38,29 @@ def risk_for_tool(slug: str) -> str:
     if any(term in name for term in ("SEND", "CREATE", "UPDATE", "PUSH", "DEPLOY")):
         return "approval_required"
     return "allow"
+
+
+def normalize_result(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    if hasattr(value, "dict"):
+        return value.dict()
+    if isinstance(value, (dict, list, str, int, float, bool)) or value is None:
+        return value
+    return {"type": type(value).__name__, "text": str(value)[:2000]}
+
+
+async def execute_tool(tool_slug: str, arguments: dict[str, Any], user_id: str) -> Any:
+    def _execute() -> Any:
+        composio = Composio(api_key=os.environ["COMPOSIO_API_KEY"])
+        return composio.tools.execute(
+            tool_slug,
+            arguments=arguments,
+            user_id=user_id,
+            dangerously_skip_version_check=True,
+        )
+
+    return normalize_result(await asyncio.to_thread(_execute))
 
 
 def receipt(run_id: str, event: str, detail: str) -> dict[str, str]:
@@ -164,6 +188,81 @@ async def run_workflow(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@api.post("/tools/execute")
+async def tool_gateway(payload: dict[str, Any]) -> dict[str, Any]:
+    tool_slug = str(payload.get("tool", "")).strip().upper()
+    arguments = payload.get("arguments", {})
+    user_id = str(payload.get("user_id", "tpberg3tp")).strip() or "tpberg3tp"
+    if not tool_slug:
+        return {"ok": False, "error": "tool is required"}
+    if not isinstance(arguments, dict):
+        return {"ok": False, "error": "arguments must be an object"}
+
+    run_id = str(uuid4())
+    decision = risk_for_tool(tool_slug)
+    receipts = [receipt(run_id, "tool_requested", tool_slug)]
+
+    if decision == "blocked":
+        run_record = {
+            "id": run_id,
+            "kind": "tool_execution",
+            "tool": tool_slug,
+            "status": "blocked",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "policy": decision,
+            "receipts": [*receipts, receipt(run_id, "policy_blocked", tool_slug)],
+        }
+        await prepend_state("runs", run_record)
+        return {"ok": False, "run_id": run_id, "status": "blocked", "policy": decision}
+
+    if decision == "approval_required":
+        run_record = {
+            "id": run_id,
+            "kind": "tool_execution",
+            "tool": tool_slug,
+            "arguments": arguments,
+            "user_id": user_id,
+            "status": "awaiting_approval",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "policy": decision,
+            "receipts": [*receipts, receipt(run_id, "approval_required", tool_slug)],
+        }
+        await prepend_state("runs", run_record)
+        return {
+            "ok": True,
+            "run_id": run_id,
+            "status": "awaiting_approval",
+            "policy": decision,
+        }
+
+    try:
+        result = await execute_tool(tool_slug, arguments, user_id)
+    except Exception as error:
+        run_record = {
+            "id": run_id,
+            "kind": "tool_execution",
+            "tool": tool_slug,
+            "status": "failed",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "policy": decision,
+            "receipts": [*receipts, receipt(run_id, "execution_failed", type(error).__name__)],
+        }
+        await prepend_state("runs", run_record)
+        return {"ok": False, "run_id": run_id, "status": "failed", "error": str(error)}
+
+    run_record = {
+        "id": run_id,
+        "kind": "tool_execution",
+        "tool": tool_slug,
+        "status": "executed",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "policy": decision,
+        "receipts": [*receipts, receipt(run_id, "executed", tool_slug)],
+    }
+    await prepend_state("runs", run_record)
+    return {"ok": True, "run_id": run_id, "status": "executed", "result": result}
+
+
 @api.post("/approvals/{run_id}")
 async def decide_approval(run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     decision = str(payload.get("decision", "")).strip().lower()
@@ -177,7 +276,6 @@ async def decide_approval(run_id: str, payload: dict[str, Any]) -> dict[str, Any
     if target.get("status") != "awaiting_approval":
         return {"ok": False, "error": "run is not awaiting approval", "status": target.get("status")}
 
-    target["status"] = "approved" if decision == "approve" else "rejected"
     target["approval"] = {
         "decision": decision,
         "decided_at": datetime.now(timezone.utc).isoformat(),
@@ -185,6 +283,35 @@ async def decide_approval(run_id: str, payload: dict[str, Any]) -> dict[str, Any
     target.setdefault("receipts", []).append(
         receipt(run_id, f"approval_{decision}", f"Run {decision}d by user")
     )
+
+    if decision == "reject":
+        target["status"] = "rejected"
+        await CONTROL_PLANE_STATE.put.aio("runs", runs)
+        return {"ok": True, "run": target}
+
+    if target.get("kind") == "tool_execution":
+        try:
+            result = await execute_tool(
+                str(target["tool"]),
+                target.get("arguments", {}),
+                str(target.get("user_id", "tpberg3tp")),
+            )
+        except Exception as error:
+            target["status"] = "failed"
+            target.setdefault("receipts", []).append(
+                receipt(run_id, "execution_failed", type(error).__name__)
+            )
+            await CONTROL_PLANE_STATE.put.aio("runs", runs)
+            return {"ok": False, "run": target, "error": str(error)}
+
+        target["status"] = "executed"
+        target.setdefault("receipts", []).append(
+            receipt(run_id, "executed_after_approval", str(target["tool"]))
+        )
+        await CONTROL_PLANE_STATE.put.aio("runs", runs)
+        return {"ok": True, "run": target, "result": result}
+
+    target["status"] = "approved"
     await CONTROL_PLANE_STATE.put.aio("runs", runs)
     return {"ok": True, "run": target}
 
